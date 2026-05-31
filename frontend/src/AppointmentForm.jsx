@@ -8,6 +8,14 @@ const BrandLogo = () => (
     </svg>
 );
 
+const VEHICLE_BRANDS = {
+    'Toyota': ['Vios', 'Fortuner', 'Hilux', 'Wigo', 'Innova', 'Other'],
+    'Mitsubishi': ['Mirage G4', 'Xpander', 'Montero Sport', 'Triton', 'Other'],
+    'Honda': ['Civic', 'City', 'CR-V', 'Brio', 'BR-V', 'Other'],
+    'Nissan': ['Navara', 'Terra', 'Almera', 'Patrol', 'Urvan', 'Other'],
+    'Other': []
+};
+
 const AppointmentForm = () => {
     const [formData, setFormData] = useState({
         name: '',
@@ -26,6 +34,81 @@ const AppointmentForm = () => {
     const [status, setStatus] = useState({ type: '', message: '', errors: {} });
     const [submittedData, setSubmittedData] = useState(null);
     const [isConfirming, setIsConfirming] = useState(false);
+
+    const [selectedBrand, setSelectedBrand] = useState('');
+    const [selectedModel, setSelectedModel] = useState('');
+    const [customBrandText, setCustomBrandText] = useState('');
+    const [customModelText, setCustomModelText] = useState('');
+
+    const handleBrandChange = (brand) => {
+        setSelectedBrand(brand);
+        setSelectedModel('');
+        setCustomBrandText('');
+        setCustomModelText('');
+        
+        if (brand === 'Other') {
+            setFormData(prev => ({
+                ...prev,
+                vehicle_model: 'Other',
+                custom_vehicle_model: ''
+            }));
+        } else {
+            setFormData(prev => ({
+                ...prev,
+                vehicle_model: '',
+                custom_vehicle_model: ''
+            }));
+        }
+    };
+
+    const handleModelChange = (model) => {
+        setSelectedModel(model);
+        setCustomModelText('');
+        
+        if (model === 'Other') {
+            setFormData(prev => ({
+                ...prev,
+                vehicle_model: 'Other',
+                custom_vehicle_model: ''
+            }));
+        } else {
+            setFormData(prev => ({
+                ...prev,
+                vehicle_model: `${selectedBrand} ${model}`,
+                custom_vehicle_model: ''
+            }));
+        }
+    };
+
+    const handleCustomBrandTextChange = (e) => {
+        const brandVal = e.target.value;
+        setCustomBrandText(brandVal);
+        
+        setFormData(prev => ({
+            ...prev,
+            vehicle_model: 'Other',
+            custom_vehicle_model: brandVal && customModelText ? `${brandVal} ${customModelText}` : (brandVal || customModelText)
+        }));
+    };
+
+    const handleCustomModelTextChange = (e) => {
+        const modelVal = e.target.value;
+        setCustomModelText(modelVal);
+        
+        if (selectedBrand === 'Other') {
+            setFormData(prev => ({
+                ...prev,
+                vehicle_model: 'Other',
+                custom_vehicle_model: customBrandText && modelVal ? `${customBrandText} ${modelVal}` : (customBrandText || modelVal)
+            }));
+        } else {
+            setFormData(prev => ({
+                ...prev,
+                vehicle_model: 'Other',
+                custom_vehicle_model: `${selectedBrand} ${modelVal}`
+            }));
+        }
+    };
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -86,6 +169,10 @@ const AppointmentForm = () => {
                     name: '', email: '', service_date: '', vehicle_model: '',
                     custom_vehicle_model: '', service_type: '', custom_service_type: '', media_url: '', media_file: '', media_file_name: '', notes: ''
                 });
+                setSelectedBrand('');
+                setSelectedModel('');
+                setCustomBrandText('');
+                setCustomModelText('');
             } else if (response.status === 400) {
                 setStatus({ type: 'error', message: 'Please correct the highlighted errors.', errors: data });
                 setIsConfirming(false);
@@ -199,23 +286,55 @@ const AppointmentForm = () => {
                         {status.errors.service_date && <span className="error-text">{status.errors.service_date}</span>}
                     </div>
 
+                    {/* Car Brand Selection */}
                     <div className="form-group">
-                        <label>Vehicle Model <span className="required">*</span></label>
+                        <label>Car Brand <span className="required">*</span></label>
                         <div className="radio-group-horizontal">
-                            {['Mirage G4', 'Xpander', 'Montero Sport', 'Triton', 'Other'].map(model => (
-                                <label key={model} className="radio-label-minimal">
-                                    <input type="radio" name="vehicle_model" value={model} checked={formData.vehicle_model === model} onChange={handleChange} required />
-                                    <span className="radio-text">{model}</span>
+                            {Object.keys(VEHICLE_BRANDS).map(brand => (
+                                <label key={brand} className="radio-label-minimal">
+                                    <input type="radio" name="vehicle_brand" value={brand} checked={selectedBrand === brand} onChange={() => handleBrandChange(brand)} required />
+                                    <span className="radio-text">{brand}</span>
                                 </label>
                             ))}
                         </div>
-                        {status.errors.vehicle_model && <span className="error-text">{status.errors.vehicle_model}</span>}
                     </div>
 
-                    {formData.vehicle_model === 'Other' && (
+                    {/* Dynamic Vehicle Model Selection based on Brand */}
+                    {selectedBrand && selectedBrand !== 'Other' && (
+                        <div className="form-group fade-in">
+                            <label>Vehicle Model <span className="required">*</span></label>
+                            <div className="radio-group-horizontal">
+                                {VEHICLE_BRANDS[selectedBrand].map(model => (
+                                    <label key={model} className="radio-label-minimal">
+                                        <input type="radio" name="vehicle_model" value={model} checked={selectedModel === model} onChange={() => handleModelChange(model)} required />
+                                        <span className="radio-text">{model}</span>
+                                    </label>
+                                ))}
+                            </div>
+                            {status.errors.vehicle_model && <span className="error-text">{status.errors.vehicle_model}</span>}
+                        </div>
+                    )}
+
+                    {/* Custom Model input for selected Brand */}
+                    {selectedBrand && selectedBrand !== 'Other' && selectedModel === 'Other' && (
                         <div className="form-group floating-group fade-in">
-                            <input type="text" id="custom_vehicle_model" name="custom_vehicle_model" value={formData.custom_vehicle_model} onChange={handleChange} className={status.errors.custom_vehicle_model ? 'input-error' : ''} required placeholder=" " />
-                            <label htmlFor="custom_vehicle_model">Specify Vehicle <span className="required">*</span></label>
+                            <input type="text" id="custom_vehicle_model_input" value={customModelText} onChange={handleCustomModelTextChange} className={status.errors.custom_vehicle_model ? 'input-error' : ''} required placeholder=" " />
+                            <label htmlFor="custom_vehicle_model_input">Specify Model <span className="required">*</span></label>
+                            {status.errors.custom_vehicle_model && <span className="error-text">{status.errors.custom_vehicle_model}</span>}
+                        </div>
+                    )}
+
+                    {/* Custom Brand & Model inputs when Brand is 'Other' */}
+                    {selectedBrand === 'Other' && (
+                        <div className="form-row fade-in">
+                            <div className="form-group floating-group">
+                                <input type="text" id="custom_brand_input" value={customBrandText} onChange={handleCustomBrandTextChange} className={status.errors.custom_vehicle_model ? 'input-error' : ''} required placeholder=" " />
+                                <label htmlFor="custom_brand_input">Specify Brand <span className="required">*</span></label>
+                            </div>
+                            <div className="form-group floating-group">
+                                <input type="text" id="custom_model_input" value={customModelText} onChange={handleCustomModelTextChange} className={status.errors.custom_vehicle_model ? 'input-error' : ''} required placeholder=" " />
+                                <label htmlFor="custom_model_input">Specify Model <span className="required">*</span></label>
+                            </div>
                         </div>
                     )}
 
