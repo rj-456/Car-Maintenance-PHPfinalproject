@@ -45,6 +45,19 @@ if (!$hasCustomService) {
     @$db->exec("ALTER TABLE appointments ADD COLUMN custom_service_type TEXT");
 }
 
+// Gracefully migrate existing databases if contact_number column does not exist
+$result = $db->query("PRAGMA table_info(appointments)");
+$hasContactNumber = false;
+while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    if ($row['name'] === 'contact_number') {
+        $hasContactNumber = true;
+        break;
+    }
+}
+if (!$hasContactNumber) {
+    @$db->exec("ALTER TABLE appointments ADD COLUMN contact_number TEXT");
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $errors = [];
     $isValid = true;
@@ -69,6 +82,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = trim($data->email);
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $errors['email'] = "Invalid email format";
+            $isValid = false;
+        }
+    }
+
+    // 2.5. Validate Contact Number
+    if (empty($data->contact_number)) {
+        $errors['contact_number'] = "Contact number is required";
+        $isValid = false;
+    } else {
+        $contact_number = trim($data->contact_number);
+        if (!preg_match("/^[0-9+\-\s()]{7,20}$/", $contact_number)) {
+            $errors['contact_number'] = "Invalid phone number format";
             $isValid = false;
         }
     }
@@ -149,13 +174,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $stmt = $db->prepare("INSERT INTO appointments (
-            name, email, service_date, vehicle_model, custom_vehicle_model, service_type, custom_service_type, media_url, notes, status
+            name, email, contact_number, service_date, vehicle_model, custom_vehicle_model, service_type, custom_service_type, media_url, notes, status
         ) VALUES (
-            :name, :email, :service_date, :vehicle_model, :custom_vehicle_model, :service_type, :custom_service_type, :media_url, :notes, 'Pending'
+            :name, :email, :contact_number, :service_date, :vehicle_model, :custom_vehicle_model, :service_type, :custom_service_type, :media_url, :notes, 'Pending'
         )");
         
         $stmt->bindValue(':name', $name, SQLITE3_TEXT);
         $stmt->bindValue(':email', $email, SQLITE3_TEXT);
+        $stmt->bindValue(':contact_number', $contact_number, SQLITE3_TEXT);
         $stmt->bindValue(':service_date', $data->service_date, SQLITE3_TEXT);
         $stmt->bindValue(':vehicle_model', $data->vehicle_model, SQLITE3_TEXT);
         $stmt->bindValue(':custom_vehicle_model', $data->custom_vehicle_model ?? "", SQLITE3_TEXT);
@@ -173,6 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 "id" => $db->lastInsertRowID(),
                 "name" => $name,
                 "email" => $email,
+                "contact_number" => $contact_number,
                 "service_date" => $data->service_date,
                 "vehicle_model" => $data->vehicle_model,
                 "custom_vehicle_model" => $data->custom_vehicle_model ?? "",

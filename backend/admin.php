@@ -48,7 +48,7 @@ $queryStr = "SELECT * FROM appointments WHERE 1=1";
 $binds = [];
 
 if (!empty($search)) {
-    $queryStr .= " AND (name LIKE :search OR email LIKE :search OR vehicle_model LIKE :search OR custom_vehicle_model LIKE :search OR service_type LIKE :search OR custom_service_type LIKE :search OR notes LIKE :search)";
+    $queryStr .= " AND (name LIKE :search OR email LIKE :search OR contact_number LIKE :search OR vehicle_model LIKE :search OR custom_vehicle_model LIKE :search OR service_type LIKE :search OR custom_service_type LIKE :search OR notes LIKE :search)";
     $binds[':search'] = '%' . $search . '%';
 }
 if (!empty($status_filter)) {
@@ -537,6 +537,9 @@ $active_query = $_SERVER['QUERY_STRING'] ?? '';
                                     <div class="customer-info">
                                         <span class="customer-name"><?= htmlspecialchars($row['name']) ?></span>
                                         <span class="customer-email"><?= htmlspecialchars($row['email']) ?></span>
+                                        <?php if (!empty($row['contact_number'])): ?>
+                                            <span class="customer-phone" style="font-size: 0.85rem; color: var(--accent-primary); margin-top: 0.25rem; font-weight: 500; letter-spacing: 0.5px; white-space: nowrap;">📞 <?= htmlspecialchars($row['contact_number']) ?></span>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                                 <td>

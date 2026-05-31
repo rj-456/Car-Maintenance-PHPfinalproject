@@ -20,6 +20,7 @@ const AppointmentForm = () => {
     const [formData, setFormData] = useState({
         name: '',
         email: '',
+        contact_number: '',
         service_date: '',
         vehicle_model: '',
         custom_vehicle_model: '',
@@ -166,7 +167,7 @@ const AppointmentForm = () => {
                 setSubmittedData(data);
                 setIsConfirming(false);
                 setFormData({
-                    name: '', email: '', service_date: '', vehicle_model: '',
+                    name: '', email: '', contact_number: '', service_date: '', vehicle_model: '',
                     custom_vehicle_model: '', service_type: '', custom_service_type: '', media_url: '', media_file: '', media_file_name: '', notes: ''
                 });
                 setSelectedBrand('');
@@ -233,9 +234,10 @@ const AppointmentForm = () => {
                         <p className="success-message" style={{ marginBottom: '2rem' }}>Please confirm your booking information before submitting.</p>
                         
                         <div className="summary-details" style={{ borderTop: 'none', paddingTop: 0 }}>
-                            <div className="detail-row"><span>Name</span> <span>{formData.name}</span></div>
-                            <div className="detail-row"><span>Email</span> <span>{formData.email}</span></div>
-                            <div className="detail-row"><span>Date</span> <span>{formData.service_date}</span></div>
+                             <div className="detail-row"><span>Name</span> <span>{formData.name}</span></div>
+                             <div className="detail-row"><span>Email</span> <span>{formData.email}</span></div>
+                             <div className="detail-row"><span>Contact</span> <span>{formData.contact_number}</span></div>
+                             <div className="detail-row"><span>Date</span> <span>{formData.service_date}</span></div>
                             <div className="detail-row"><span>Vehicle</span> <span>{formData.vehicle_model === 'Other' ? formData.custom_vehicle_model : formData.vehicle_model}</span></div>
                             <div className="detail-row"><span>Service</span> <span>{formData.service_type === 'Other' ? formData.custom_service_type : formData.service_type}</span></div>
                             {(formData.media_url || formData.media_file_name) && (
@@ -280,11 +282,19 @@ const AppointmentForm = () => {
                         </div>
                     </div>
 
-                    <div className="form-group">
-                        <label htmlFor="service_date">Preferred Date <span className="required">*</span></label>
-                        <input type="date" id="service_date" name="service_date" value={formData.service_date} onChange={handleChange} className={status.errors.service_date ? 'input-error' : ''} required />
-                        {status.errors.service_date && <span className="error-text">{status.errors.service_date}</span>}
-                    </div>
+                     <div className="form-row">
+                         <div className="form-group">
+                             <label htmlFor="service_date">Preferred Date <span className="required">*</span></label>
+                             <input type="date" id="service_date" name="service_date" value={formData.service_date} onChange={handleChange} className={status.errors.service_date ? 'input-error' : ''} required />
+                             {status.errors.service_date && <span className="error-text">{status.errors.service_date}</span>}
+                         </div>
+
+                         <div className="form-group floating-group">
+                             <input type="text" id="contact_number" name="contact_number" value={formData.contact_number} onChange={handleChange} className={status.errors.contact_number ? 'input-error' : ''} required placeholder=" " />
+                             <label htmlFor="contact_number">Contact Number <span className="required">*</span></label>
+                             {status.errors.contact_number && <span className="error-text">{status.errors.contact_number}</span>}
+                         </div>
+                     </div>
 
                     {/* Car Brand Selection */}
                     <div className="form-group">
