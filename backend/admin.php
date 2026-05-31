@@ -240,6 +240,12 @@ $active_query = $_SERVER['QUERY_STRING'] ?? '';
             border-bottom-color: var(--accent-primary);
         }
 
+        /* Prevent system dropdown default styling from hiding white text on white bg */
+        select option {
+            background-color: var(--bg-light);
+            color: var(--text-main);
+        }
+
         /* Date filter color tweak */
         input[type="date"]::-webkit-calendar-picker-indicator {
             filter: invert(1);
