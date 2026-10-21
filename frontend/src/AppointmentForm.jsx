@@ -2,9 +2,27 @@ import React, { useState } from 'react';
 import './AppointmentForm.css';
 
 const BrandLogo = () => (
-    <svg className="brand-logo-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="rgba(255,90,31,0.5)" strokeWidth="1" />
-        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" strokeWidth="1.5" />
+    <svg className="brand-logo-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <linearGradient id="brandApexGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#ff6b2b" />
+                <stop offset="100%" stopColor="#e03e00" />
+            </linearGradient>
+            <linearGradient id="brandShieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#1e222d" />
+                <stop offset="100%" stopColor="#0b0d11" />
+            </linearGradient>
+            <filter id="brandGlow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#ff5a1f" floodOpacity="0.45" />
+            </filter>
+        </defs>
+        <polygon points="50,6 88,24 88,68 50,94 12,68 12,24" fill="url(#brandShieldGrad)" stroke="url(#brandApexGrad)" strokeWidth="3.5" strokeLinejoin="round" filter="url(#brandGlow)" />
+        <polygon points="50,13 81,28 81,64 50,86 19,64 19,28" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="1.2" />
+        <path d="M 50,22 L 72,58 L 62,58 L 50,37 L 38,58 L 28,58 Z" fill="url(#brandApexGrad)" />
+        <path d="M 32,65 L 68,65 L 64,71 L 36,71 Z" fill="#ffffff" opacity="0.95" />
+        <circle cx="50" cy="48" r="3.5" fill="#ffffff" />
+        <line x1="22" y1="46" x2="15" y2="46" stroke="#ff5a1f" strokeWidth="2.5" strokeLinecap="round" />
+        <line x1="78" y1="46" x2="85" y2="46" stroke="#ff5a1f" strokeWidth="2.5" strokeLinecap="round" />
     </svg>
 );
 

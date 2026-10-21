@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%">
+  <defs>
+    <linearGradient id="apexGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff6b2b"/>
+      <stop offset="100%" stop-color="#e03e00"/>
+    </linearGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e222d"/>
+      <stop offset="100%" stop-color="#0b0d11"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#ff5a1f" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <!-- Hexagonal Shield Badge -->
+  <polygon points="50,6 88,24 88,68 50,94 12,68 12,24" fill="url(#shieldGrad)" stroke="url(#apexGrad)" stroke-width="3.5" stroke-linejoin="round" filter="url(#glow)"/>
+
+  <!-- Inner subtle border -->
+  <polygon points="50,13 81,28 81,64 50,86 19,64 19,28" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1.2"/>
+
+  <!-- Dynamic Aerodynamic Apex "A" / Turbo Car Silhouette -->
+  <!-- Top Speed Wing / Roofline -->
+  <path d="M 50,22 L 72,58 L 62,58 L 50,37 L 38,58 L 28,58 Z" fill="url(#apexGrad)"/>
+
+  <!-- Aggressive Lower Splitter / Spoiler Accents -->
+  <path d="M 32,65 L 68,65 L 64,71 L 36,71 Z" fill="#ffffff" opacity="0.95"/>
+  <circle cx="50" cy="48" r="3.5" fill="#ffffff"/>
+  
+  <!-- Speed Dash lines -->
+  <line x1="22" y1="46" x2="15" y2="46" stroke="#ff5a1f" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="78" y1="46" x2="85" y2="46" stroke="#ff5a1f" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

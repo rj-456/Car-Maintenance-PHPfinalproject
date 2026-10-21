@@ -1,75 +1,140 @@
 <?php
+session_start();
+
 // Initialize SQLite connection
 $dbPath = __DIR__ . '/appointments.db';
 $db = new SQLite3($dbPath);
 
-// Handle Status Updates
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_status') {
-    $id = intval($_POST['id']);
-    $status = $_POST['status'];
-    $allowed_statuses = ['Pending', 'In Progress', 'Completed'];
-    
-    if (in_array($status, $allowed_statuses)) {
-        $stmt = $db->prepare("UPDATE appointments SET status = :status WHERE id = :id");
-        $stmt->bindValue(':status', $status, SQLITE3_TEXT);
+// Ensure admins table exists with password hash support
+$db->exec("CREATE TABLE IF NOT EXISTS admins (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)");
+
+// Seed default administrator if not present
+$adminCount = $db->querySingle("SELECT COUNT(*) FROM admins");
+if ($adminCount === 0) {
+    $stmt = $db->prepare("INSERT INTO admins (username, password_hash) VALUES (:username, :hash)");
+    $stmt->bindValue(':username', 'admin', SQLITE3_TEXT);
+    $stmt->bindValue(':hash', password_hash('admin123', PASSWORD_DEFAULT), SQLITE3_TEXT);
+    $stmt->execute();
+}
+
+// Handle Logout
+if (isset($_GET['action']) && $_GET['action'] === 'logout') {
+    $_SESSION = [];
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params["path"], $params["domain"],
+            $params["secure"], $params["httponly"]
+        );
+    }
+    session_destroy();
+    header("Location: admin.php");
+    exit();
+}
+
+$login_error = '';
+
+// Handle Login POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'login') {
+    $username = trim($_POST['username'] ?? '');
+    $password = $_POST['password'] ?? '';
+
+    if (empty($username) || empty($password)) {
+        $login_error = 'Please provide both username and password.';
+    } else {
+        $stmt = $db->prepare("SELECT * FROM admins WHERE username = :username");
+        $stmt->bindValue(':username', $username, SQLITE3_TEXT);
+        $res = $stmt->execute();
+        $admin = $res->fetchArray(SQLITE3_ASSOC);
+
+        if ($admin && password_verify($password, $admin['password_hash'])) {
+            $_SESSION['admin_logged_in'] = true;
+            $_SESSION['admin_username'] = $admin['username'];
+            header("Location: admin.php");
+            exit();
+        } else {
+            $login_error = 'Invalid username or password.';
+        }
+    }
+}
+
+$isLoggedIn = isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
+
+// Only execute dashboard data operations if authenticated
+if ($isLoggedIn) {
+    // Handle Status Updates
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_status') {
+        $id = intval($_POST['id']);
+        $status = $_POST['status'];
+        $allowed_statuses = ['Pending', 'In Progress', 'Completed'];
+        
+        if (in_array($status, $allowed_statuses)) {
+            $stmt = $db->prepare("UPDATE appointments SET status = :status WHERE id = :id");
+            $stmt->bindValue(':status', $status, SQLITE3_TEXT);
+            $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
+            $stmt->execute();
+        }
+        
+        // Redirect to prevent form double-submission
+        header("Location: admin.php" . (isset($_POST['query_string']) ? '?' . $_POST['query_string'] : ''));
+        exit();
+    }
+
+    // Handle Deletion
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete') {
+        $id = intval($_POST['id']);
+        $stmt = $db->prepare("DELETE FROM appointments WHERE id = :id");
         $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
         $stmt->execute();
+        
+        header("Location: admin.php" . (isset($_POST['query_string']) ? '?' . $_POST['query_string'] : ''));
+        exit();
     }
-    
-    // Redirect to prevent form double-submission
-    header("Location: admin.php" . (isset($_POST['query_string']) ? '?' . $_POST['query_string'] : ''));
-    exit();
+
+    // Fetch KPIs
+    $totalCount = $db->querySingle("SELECT COUNT(*) FROM appointments") ?? 0;
+    $pendingCount = $db->querySingle("SELECT COUNT(*) FROM appointments WHERE status = 'Pending'") ?? 0;
+    $progressCount = $db->querySingle("SELECT COUNT(*) FROM appointments WHERE status = 'In Progress'") ?? 0;
+    $completedCount = $db->querySingle("SELECT COUNT(*) FROM appointments WHERE status = 'Completed'") ?? 0;
+
+    // Filters & Search logic
+    $search = $_GET['search'] ?? '';
+    $status_filter = $_GET['status_filter'] ?? '';
+    $service_filter = $_GET['service_filter'] ?? '';
+
+    // Build Query
+    $queryStr = "SELECT * FROM appointments WHERE 1=1";
+    $binds = [];
+
+    if (!empty($search)) {
+        $queryStr .= " AND (name LIKE :search OR email LIKE :search OR contact_number LIKE :search OR vehicle_model LIKE :search OR custom_vehicle_model LIKE :search OR service_type LIKE :search OR custom_service_type LIKE :search OR notes LIKE :search)";
+        $binds[':search'] = '%' . $search . '%';
+    }
+    if (!empty($status_filter)) {
+        $queryStr .= " AND status = :status_filter";
+        $binds[':status_filter'] = $status_filter;
+    }
+    if (!empty($service_filter)) {
+        $queryStr .= " AND service_type = :service_filter";
+        $binds[':service_filter'] = $service_filter;
+    }
+
+    $queryStr .= " ORDER BY created_at DESC";
+
+    $stmt = $db->prepare($queryStr);
+    foreach ($binds as $key => $val) {
+        $stmt->bindValue($key, $val, SQLITE3_TEXT);
+    }
+    $results = $stmt->execute();
+
+    // Keep track of active query string to maintain state after post requests
+    $active_query = $_SERVER['QUERY_STRING'] ?? '';
 }
-
-// Handle Deletion
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete') {
-    $id = intval($_POST['id']);
-    $stmt = $db->prepare("DELETE FROM appointments WHERE id = :id");
-    $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
-    $stmt->execute();
-    
-    header("Location: admin.php" . (isset($_POST['query_string']) ? '?' . $_POST['query_string'] : ''));
-    exit();
-}
-
-// Fetch KPIs
-$totalCount = $db->querySingle("SELECT COUNT(*) FROM appointments") ?? 0;
-$pendingCount = $db->querySingle("SELECT COUNT(*) FROM appointments WHERE status = 'Pending'") ?? 0;
-$progressCount = $db->querySingle("SELECT COUNT(*) FROM appointments WHERE status = 'In Progress'") ?? 0;
-$completedCount = $db->querySingle("SELECT COUNT(*) FROM appointments WHERE status = 'Completed'") ?? 0;
-
-// Filters & Search logic
-$search = $_GET['search'] ?? '';
-$status_filter = $_GET['status_filter'] ?? '';
-$service_filter = $_GET['service_filter'] ?? '';
-
-// Build Query
-$queryStr = "SELECT * FROM appointments WHERE 1=1";
-$binds = [];
-
-if (!empty($search)) {
-    $queryStr .= " AND (name LIKE :search OR email LIKE :search OR contact_number LIKE :search OR vehicle_model LIKE :search OR custom_vehicle_model LIKE :search OR service_type LIKE :search OR custom_service_type LIKE :search OR notes LIKE :search)";
-    $binds[':search'] = '%' . $search . '%';
-}
-if (!empty($status_filter)) {
-    $queryStr .= " AND status = :status_filter";
-    $binds[':status_filter'] = $status_filter;
-}
-if (!empty($service_filter)) {
-    $queryStr .= " AND service_type = :service_filter";
-    $binds[':service_filter'] = $service_filter;
-}
-
-$queryStr .= " ORDER BY created_at DESC";
-
-$stmt = $db->prepare($queryStr);
-foreach ($binds as $key => $val) {
-    $stmt->bindValue($key, $val, SQLITE3_TEXT);
-}
-$results = $stmt->execute();
-
-// Keep track of active query string to maintain state after post requests
-$active_query = $_SERVER['QUERY_STRING'] ?? '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -77,6 +142,8 @@ $active_query = $_SERVER['QUERY_STRING'] ?? '';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Apex Auto Care - Control Panel</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=apex2">
+    <link rel="alternate icon" href="/favicon.svg">
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -423,6 +490,227 @@ $active_query = $_SERVER['QUERY_STRING'] ?? '';
             white-space: normal;
         }
 
+        /* Login Portal Styles */
+        .login-wrapper {
+            min-height: calc(100vh - 8rem);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 440px;
+            background: rgba(13, 14, 18, 0.92);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 90, 31, 0.28);
+            border-radius: 16px;
+            padding: 3rem 2.5rem;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(255, 90, 31, 0.12);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .login-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+        }
+
+        .login-brand-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 1.25rem;
+            display: block;
+        }
+
+        .login-title {
+            font-size: 1.85rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            color: var(--text-main);
+            margin-bottom: 0.35rem;
+        }
+
+        .login-subtitle {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-bottom: 2rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .login-error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            color: #fca5a5;
+            padding: 0.85rem 1rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            text-align: left;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .password-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .login-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            padding: 0.85rem 1rem;
+            color: var(--text-main);
+            font-size: 1rem;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .password-wrapper .login-input {
+            padding-right: 3rem;
+        }
+
+        .login-input:focus {
+            border-color: var(--accent-primary);
+            background: rgba(255, 255, 255, 0.07);
+            box-shadow: 0 0 15px rgba(255, 90, 31, 0.2);
+        }
+
+        .btn-toggle-pw {
+            position: absolute;
+            right: 0.75rem;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s ease;
+        }
+
+        .btn-toggle-pw:hover {
+            color: var(--text-main);
+        }
+
+        .btn-login {
+            width: 100%;
+            margin-top: 0.5rem;
+            background: linear-gradient(135deg, #ff6b2b, #e03e00);
+            border: none;
+            color: white;
+            font-weight: 600;
+            font-size: 1rem;
+            padding: 0.95rem;
+            border-radius: 8px;
+            cursor: pointer;
+            letter-spacing: 0.5px;
+            transition: all 0.25s ease;
+            box-shadow: 0 4px 20px rgba(255, 90, 31, 0.35);
+        }
+
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(255, 90, 31, 0.55);
+        }
+
+        /* Header User Controls */
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+        }
+
+        .admin-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .admin-badge .user-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 8px #10b981;
+        }
+
+        .admin-badge strong {
+            color: var(--text-main);
+        }
+
+        .btn-portal-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.85rem;
+            padding: 0.5rem 0.9rem;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: all 0.2s ease;
+        }
+
+        .btn-portal-link:hover {
+            color: var(--text-main);
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+
+        .btn-logout {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .btn-logout:hover {
+            background: rgba(239, 68, 68, 0.25);
+            border-color: rgba(239, 68, 68, 0.5);
+            color: #ffffff;
+            transform: translateY(-1px);
+        }
+
         /* Animations */
         .fade-in {
             animation: fadeIn 0.8s ease-out forwards;
@@ -435,18 +723,51 @@ $active_query = $_SERVER['QUERY_STRING'] ?? '';
     </style>
 </head>
 <body class="fade-in">
+    <?php if ($isLoggedIn): ?>
     <div class="container">
         <!-- Header -->
         <header>
             <div class="brand">
-                <svg class="brand-logo-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="rgba(255,90,31,0.5)" stroke-width="1" />
-                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" stroke-width="1.5" />
+                <svg class="brand-logo-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="adminApexGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#ff6b2b"/>
+                            <stop offset="100%" stop-color="#e03e00"/>
+                        </linearGradient>
+                        <linearGradient id="adminShieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#1e222d"/>
+                            <stop offset="100%" stop-color="#0b0d11"/>
+                        </linearGradient>
+                    </defs>
+                    <polygon points="50,6 88,24 88,68 50,94 12,68 12,24" fill="url(#adminShieldGrad)" stroke="url(#adminApexGrad)" stroke-width="4" stroke-linejoin="round"/>
+                    <polygon points="50,13 81,28 81,64 50,86 19,64 19,28" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1.2"/>
+                    <path d="M 50,22 L 72,58 L 62,58 L 50,37 L 38,58 L 28,58 Z" fill="url(#adminApexGrad)"/>
+                    <path d="M 32,65 L 68,65 L 64,71 L 36,71 Z" fill="#ffffff" opacity="0.95"/>
+                    <circle cx="50" cy="48" r="3.5" fill="#ffffff"/>
+                    <line x1="22" y1="46" x2="15" y2="46" stroke="#ff5a1f" stroke-width="3" stroke-linecap="round"/>
+                    <line x1="78" y1="46" x2="85" y2="46" stroke="#ff5a1f" stroke-width="3" stroke-linecap="round"/>
                 </svg>
                 <div>
                     <h1>APEX</h1>
                     <p>Administrative Control Panel</p>
                 </div>
+            </div>
+            <div class="header-actions">
+                <a href="http://localhost:5173" target="_blank" class="btn-portal-link">
+                    Booking Portal ↗
+                </a>
+                <div class="admin-badge">
+                    <span class="user-dot"></span>
+                    <span>Admin: <strong><?= htmlspecialchars($_SESSION['admin_username'] ?? 'admin') ?></strong></span>
+                </div>
+                <a href="admin.php?action=logout" class="btn-logout" title="Sign Out">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                    Logout
+                </a>
             </div>
         </header>
 
@@ -629,5 +950,82 @@ $active_query = $_SERVER['QUERY_STRING'] ?? '';
             </div>
         </div>
     </div>
+    <?php else: ?>
+        <div class="login-wrapper">
+            <div class="login-card">
+                <svg class="login-brand-icon" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="loginApexGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#ff6b2b"/>
+                            <stop offset="100%" stop-color="#e03e00"/>
+                        </linearGradient>
+                        <linearGradient id="loginShieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#1e222d"/>
+                            <stop offset="100%" stop-color="#0b0d11"/>
+                        </linearGradient>
+                        <filter id="loginGlow" x="-20%" y="-20%" width="140%" height="140%">
+                            <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#ff5a1f" flood-opacity="0.5"/>
+                        </filter>
+                    </defs>
+                    <polygon points="50,6 88,24 88,68 50,94 12,68 12,24" fill="url(#loginShieldGrad)" stroke="url(#loginApexGrad)" stroke-width="3.5" stroke-linejoin="round" filter="url(#loginGlow)"/>
+                    <polygon points="50,13 81,28 81,64 50,86 19,64 19,28" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1.2"/>
+                    <path d="M 50,22 L 72,58 L 62,58 L 50,37 L 38,58 L 28,58 Z" fill="url(#loginApexGrad)"/>
+                    <path d="M 32,65 L 68,65 L 64,71 L 36,71 Z" fill="#ffffff" opacity="0.95"/>
+                    <circle cx="50" cy="48" r="3.5" fill="#ffffff"/>
+                    <line x1="22" y1="46" x2="15" y2="46" stroke="#ff5a1f" stroke-width="2.5" stroke-linecap="round"/>
+                    <line x1="78" y1="46" x2="85" y2="46" stroke="#ff5a1f" stroke-width="2.5" stroke-linecap="round"/>
+                </svg>
+
+                <h2 class="login-title">APEX AUTO CARE</h2>
+                <p class="login-subtitle">Control Panel Authentication</p>
+
+                <?php if (!empty($login_error)): ?>
+                    <div class="login-error">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        <span><?= htmlspecialchars($login_error) ?></span>
+                    </div>
+                <?php endif; ?>
+
+                <form method="POST" action="admin.php" class="login-form">
+                    <input type="hidden" name="action" value="login">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username" class="login-input" placeholder="admin" required autofocus autocomplete="username" value="<?= htmlspecialchars($_POST['username'] ?? '') ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <div class="password-wrapper">
+                            <input type="password" id="password" name="password" class="login-input" placeholder="••••••••" required autocomplete="current-password">
+                            <button type="button" class="btn-toggle-pw" onclick="togglePasswordVisibility()" title="Show/Hide Password" aria-label="Toggle Password Visibility">
+                                <svg id="pwEyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-login">Sign In</button>
+                </form>
+            </div>
+        </div>
+
+        <script>
+            function togglePasswordVisibility() {
+                const input = document.getElementById('password');
+                const icon = document.getElementById('pwEyeIcon');
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    icon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>';
+                } else {
+                    input.type = 'password';
+                    icon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
+                }
+            }
+        </script>
+    <?php endif; ?>
 </body>
 </html>

@@ -76,8 +76,10 @@ Place the `backend/` directory inside your local web server environment (such as
 cd backend
 php -S localhost:80
 ```
-* The API will now listen for incoming bookings at `http://localhost/api.php`.
-* You can access the live Control Panel dashboard at `http://localhost/admin.php`.
+* The API will now listen for incoming bookings at `http://localhost/backend/api.php`.
+* Access the Control Panel at `http://localhost/backend/admin.php`.
+  * **Default Username:** `admin`
+  * **Default Password:** `admin123`
 
 ### Step 2: Run the Frontend (React/Vite)
 Open your terminal, navigate to the `frontend/` directory, install dependencies, and start the development server:
